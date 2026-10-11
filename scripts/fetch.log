@@ -1,0 +1,7 @@
+1/3 fetching tokenURIs from Monad...
+tokenURIs: cache hit (1969)
+2/3 fetching metadata (1969 files)...
+  resume cache: 0 entries
+ meta: 50 new (cache 0) / 1969 meta: 100 new (cache 0) / 1969 meta: 150 new (cache 0) / 1969 meta: 200 new (cache 0) / 1969 meta: 250 new (cache 0) / 1969 meta: 300 new (cache 0) / 1969 meta: 350 new (cache 0) / 1969 meta: 400 new (cache 0) / 1969 meta: 450 new (cache 0) / 1969 meta: 500 new (cache 0) / 1969 meta: 550 new (cache 0) / 1969 meta: 600 new (cache 0) / 1969 meta: 650 new (cache 0) / 1969 meta: 700 new (cache 0) / 1969 meta: 750 new (cache 0) / 1969 meta: 800 new (cache 0) / 1969 meta: 850 new (cache 0) / 1969 meta: 900 new (cache 0) / 1969 meta: 950 new (cache 0) / 1969 meta: 1000 new (cache 0) / 1969 meta: 1050 new (cache 0) / 1969 meta: 1100 new (cache 0) / 1969 meta: 1150 new (cache 0) / 1969 meta: 1200 new (cache 0) / 1969 meta: 1250 new (cache 0) / 1969 meta: 1300 new (cache 0) / 1969 meta: 1350 new (cache 0) / 1969 meta: 1400 new (cache 0) / 1969 meta: 1450 new (cache 0) / 1969 meta: 1500 new (cache 0) / 1969 meta: 1550 new (cache 0) / 1969 meta: 1600 new (cache 0) / 1969 meta: 1650 new (cache 0) / 1969 meta: 1700 new (cache 0) / 1969 meta: 1750 new (cache 0) / 1969 meta: 1800 new (cache 0) / 1969 meta: 1850 new (cache 0) / 1969 meta: 1900 new (cache 0) / 1969 meta: 1950 new (cache 0) / 1969
+3/3 writing manifest... (ok=1969 failed=0)
+done: 1969 entries, 879 KB -> C:\Users\WIC USER\2nd Arena\chogforge\public\data\manifest.json

@@ -1,0 +1,125 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bone: #efe9e1;
+  --color-bone-2: #e6dfd4;
+  --color-ink: #111010;
+  --color-ash: #6b665e;
+  --color-line: #11101026;
+  --color-purple: #7856ff;
+  --color-flame: #ff5c1a;
+  --color-chogpink: #ff7ab6;
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-serif: var(--font-serif), Georgia, serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, monospace;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--color-bone);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  overflow-x: hidden;
+}
+
+::selection {
+  background: var(--color-purple);
+  color: #fff;
+}
+
+/* film grain overlay */
+.grain::after {
+  content: "";
+  position: fixed;
+  inset: -50%;
+  pointer-events: none;
+  z-index: 60;
+  opacity: 0.05;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)'/%3E%3C/svg%3E");
+  animation: grainShift 0.8s steps(4) infinite;
+}
+
+@keyframes grainShift {
+  0% { transform: translate(0, 0); }
+  25% { transform: translate(-2%, 3%); }
+  50% { transform: translate(3%, -2%); }
+  75% { transform: translate(-3%, -3%); }
+  100% { transform: translate(2%, 2%); }
+}
+
+@keyframes marquee {
+  from { transform: translate3d(0, 0, 0); }
+  to { transform: translate3d(-50%, 0, 0); }
+}
+
+.marquee-track {
+  display: flex;
+  width: max-content;
+  animation: marquee 38s linear infinite;
+}
+
+.marquee-track.rev {
+  animation-direction: reverse;
+}
+
+.marquee-track:hover {
+  animation-play-state: paused;
+}
+
+.hairline {
+  border-color: var(--color-line);
+}
+
+.duotone {
+  filter: grayscale(1) contrast(1.05);
+  transition: filter 0.45s ease;
+}
+
+.cell:hover .duotone {
+  filter: grayscale(0) contrast(1);
+}
+
+@media (hover: none) {
+  .duotone {
+    filter: none;
+  }
+}
+
+@keyframes shimmer {
+  from { background-position: 160% 0; }
+  to { background-position: -60% 0; }
+}
+
+.shimmer {
+  background-image: linear-gradient(
+    100deg,
+    var(--color-bone-2) 30%,
+    #f6f2ec 50%,
+    var(--color-bone-2) 70%
+  );
+  background-size: 220% 100%;
+  animation: shimmer 1.5s linear infinite;
+}
+
+/* hide scrollbar on horizontal filters */
+.no-bar::-webkit-scrollbar {
+  display: none;
+}
+.no-bar {
+  scrollbar-width: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .marquee-track,
+  .grain::after,
+  .shimmer {
+    animation: none;
+  }
+  html {
+    scroll-behavior: auto;
+  }
+}
