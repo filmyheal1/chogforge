@@ -92,95 +92,141 @@ function removeBackground(
   drawCover(ctx, img, img.naturalWidth, img.naturalHeight, SIZE, SIZE);
 
   const { data, width: w, height: h } = ctx.getImageData(0, 0, SIZE, SIZE);
-  const visited = new Uint8Array(w * h);
-  const step = Math.max(6, tol * 0.35);
-  const dist = (i: number, r: number, g: number, b: number) =>
-    Math.abs(data[i] - r) + Math.abs(data[i + 1] - g) + Math.abs(data[i + 2] - b);
+  const step = Math.max(4, tol * 0.2);
 
-  // seed eligibility: a color must cover >=16% of the perimeter AND touch >=2
-  // edges — true background zones do, subject parts poking the crop (hat, hair,
-  // collar) don't — so the flood can never start inside the character
-  const counts = new Map<number, number>();
-  const edgeMask = new Map<number, number>();
-  const peri: number[] = [];
-  const bucket = (i: number) =>
-    ((data[i] >> 5) << 6) | ((data[i + 1] >> 5) << 3) | (data[i + 2] >> 5);
-  const addPeri = (i: number, edge: number) => {
-    peri.push(i);
-    const k = bucket(i);
-    counts.set(k, (counts.get(k) || 0) + 1);
-    edgeMask.set(k, (edgeMask.get(k) || 0) | (1 << edge));
+  const bucket = (r: number, g: number, b: number) =>
+    ((r >> 5) << 6) | ((g >> 5) << 3) | (b >> 5);
+  const dist = (a: number, b: number) =>
+    Math.abs(data[a * 4] - data[b * 4]) +
+    Math.abs(data[a * 4 + 1] - data[b * 4 + 1]) +
+    Math.abs(data[a * 4 + 2] - data[b * 4 + 2]);
+
+  // colors that dominate the 1px border ring are background-looking by
+  // definition (they wrap the frame) — they may not protect any region
+  const ringCount = new Map<number, number>();
+  let ringTotal = 0;
+  const ringAdd = (i: number) => {
+    const k = bucket(data[i * 4], data[i * 4 + 1], data[i * 4 + 2]);
+    ringCount.set(k, (ringCount.get(k) || 0) + 1);
+    ringTotal++;
   };
   for (let x = 0; x < w; x++) {
-    addPeri(x * 4, 0);
-    addPeri(((h - 1) * w + x) * 4, 2);
+    ringAdd(x);
+    ringAdd((h - 1) * w + x);
   }
   for (let y = 1; y < h - 1; y++) {
-    addPeri(y * w * 4, 3);
-    addPeri((y * w + (w - 1)) * 4, 1);
+    ringAdd(y * w);
+    ringAdd(y * w + (w - 1));
   }
-  const minCount = Math.ceil(peri.length * 0.16);
-  const eligible = (i: number) => {
-    const k = bucket(i);
-    if ((counts.get(k) || 0) < minCount) return false;
-    const m = edgeMask.get(k) || 0;
-    return (m & (m - 1)) !== 0; // >= 2 edges
-  };
+  const ringDominant = (k: number) =>
+    (ringCount.get(k) || 0) / Math.max(1, ringTotal) >= 0.1;
 
-  const stack: number[] = [];
-  const push = (
-    x: number,
-    y: number,
-    pr: number,
-    pg: number,
-    pb: number,
-    sr: number,
-    sg: number,
-    sb: number,
-  ) => {
-    if (x < 0 || y < 0 || x >= w || y >= h) return;
-    const i = y * w + x;
-    if (visited[i]) return;
-    stack.push(i, pr, pg, pb, sr, sg, sb);
+  // subject palettes sampled from inner boxes (kept clear of border slivers),
+  // with border-dominant colors dropped
+  type Pal = { r: number; g: number; b: number }[];
+  const buildPal = (x0: number, y0: number, x1: number, y1: number): Pal => {
+    const total = Math.max(1, x1 - x0) * Math.max(1, y1 - y0);
+    const sum = new Map<number, [number, number, number, number]>();
+    for (let y = y0; y < y1; y++) {
+      for (let x = x0; x < x1; x++) {
+        const i = (y * w + x) * 4;
+        const k = bucket(data[i], data[i + 1], data[i + 2]);
+        const s = sum.get(k) || [0, 0, 0, 0];
+        s[0] += data[i];
+        s[1] += data[i + 1];
+        s[2] += data[i + 2];
+        s[3]++;
+        sum.set(k, s);
+      }
+    }
+    const pal: Pal = [];
+    const min = Math.max(4, total * 0.03);
+    for (const [k, s] of sum) {
+      if (s[3] >= min && !ringDominant(k)) {
+        pal.push({ r: s[0] / s[3], g: s[1] / s[3], b: s[2] / s[3] });
+      }
+    }
+    return pal;
   };
+  const nearPal = (r: number, g: number, b: number, pal: Pal) => {
+    for (const p of pal) {
+      if (Math.abs(p.r - r) + Math.abs(p.g - g) + Math.abs(p.b - b) <= 48)
+        return true;
+    }
+    return false;
+  };
+  const centerPal = buildPal((w * 0.38) | 0, (h * 0.38) | 0, (w * 0.62) | 0, (h * 0.62) | 0);
+  const torsoPal = buildPal((w * 0.25) | 0, (h * 0.78) | 0, (w * 0.75) | 0, (h * 0.96) | 0);
 
-  for (const i of peri) {
-    if (!eligible(i)) continue;
-    const x = (i / 4) % w;
-    const y = ((i / 4) / w) | 0;
-    const r = data[i];
-    const g = data[i + 1];
-    const b = data[i + 2];
-    push(x, y, r, g, b, r, g, b);
+  // label every border-connected region (parent-step continuity)
+  const region = new Int32Array(w * h).fill(-1);
+  type Reg = {
+    size: number;
+    r: number;
+    g: number;
+    b: number;
+    centerPx: number;
+  };
+  const regions: Reg[] = [];
+  const q = new Int32Array(w * h);
+  const C0x = (w * 0.35) | 0;
+  const C1x = (w * 0.65) | 0;
+  const C0y = (h * 0.35) | 0;
+  const C1y = (h * 0.65) | 0;
+  const boxArea = (C1x - C0x) * (C1y - C0y);
+
+  const seeds: number[] = [];
+  for (let x = 0; x < w; x++) seeds.push(x, (h - 1) * w + x);
+  for (let y = 1; y < h - 1; y++) seeds.push(y * w, y * w + (w - 1));
+
+  for (const s of seeds) {
+    if (region[s] !== -1) continue;
+    const rid = regions.length;
+    let head = 0;
+    let tail = 0;
+    q[tail++] = s;
+    region[s] = rid;
+    let size = 0;
+    let sr = 0;
+    let sg = 0;
+    let sb = 0;
+    let centerPx = 0;
+    while (head < tail) {
+      const i = q[head++];
+      size++;
+      sr += data[i * 4];
+      sg += data[i * 4 + 1];
+      sb += data[i * 4 + 2];
+      const x = i % w;
+      const y = (i / w) | 0;
+      if (x >= C0x && x < C1x && y >= C0y && y < C1y) centerPx++;
+      const pushN = (n: number) => {
+        if (region[n] === -1 && dist(i, n) <= step) {
+          region[n] = rid;
+          q[tail++] = n;
+        }
+      };
+      if (x > 0) pushN(i - 1);
+      if (x < w - 1) pushN(i + 1);
+      if (y > 0) pushN(i - w);
+      if (y < h - 1) pushN(i + w);
+    }
+    regions.push({ size, r: sr / size, g: sg / size, b: sb / size, centerPx });
   }
 
-  while (stack.length) {
-    const sb = stack.pop()!;
-    const sg = stack.pop()!;
-    const sr = stack.pop()!;
-    const pb = stack.pop()!;
-    const pg = stack.pop()!;
-    const pr = stack.pop()!;
-    const i = stack.pop()!;
-    if (visited[i]) continue;
-    visited[i] = 1;
-    const toSeed = dist(i * 4, sr, sg, sb);
-    const toParent = dist(i * 4, pr, pg, pb);
-    if (toSeed > tol || toParent > step) continue;
-    data[i * 4 + 3] = 0;
-    const x = i % w;
-    const y = (i / w) | 0;
-    const r = data[i * 4];
-    const g = data[i * 4 + 1];
-    const b = data[i * 4 + 2];
-    push(x + 1, y, r, g, b, sr, sg, sb);
-    push(x - 1, y, r, g, b, sr, sg, sb);
-    push(x, y + 1, r, g, b, sr, sg, sb);
-    push(x, y - 1, r, g, b, sr, sg, sb);
-    push(x + 1, y + 1, r, g, b, sr, sg, sb);
-    push(x - 1, y + 1, r, g, b, sr, sg, sb);
-    push(x + 1, y - 1, r, g, b, sr, sg, sb);
-    push(x - 1, y - 1, r, g, b, sr, sg, sb);
+  // keep a border region only if it looks like the character: it covers a real
+  // slice of the center box (hat/head), or its color matches the face or the
+  // torso palette; huge regions may not lean on palette matching (that only
+  // ever lets background through), and anything else is background
+  const clearReg = regions.map((reg) => {
+    const centerFrac = reg.centerPx / Math.max(1, boxArea);
+    const nearC = nearPal(reg.r, reg.g, reg.b, centerPal);
+    const nearT = nearPal(reg.r, reg.g, reg.b, torsoPal);
+    return centerFrac < 0.04 && !(reg.size < w * h * 0.2 && (nearC || nearT));
+  });
+  for (let i = 0; i < w * h; i++) {
+    const rid = region[i];
+    if (rid >= 0 && clearReg[rid]) data[i * 4 + 3] = 0;
   }
 
   ctx.putImageData(new ImageData(data, w, h), 0, 0);
