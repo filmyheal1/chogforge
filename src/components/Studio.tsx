@@ -93,58 +93,94 @@ function removeBackground(
 
   const { data, width: w, height: h } = ctx.getImageData(0, 0, SIZE, SIZE);
   const visited = new Uint8Array(w * h);
-  const seed = [
-    (data[0] + data[(w - 1) * 4] + data[(h - 1) * w * 4] + data[(h * w - 1) * 4]) / 4,
-    (data[1] + data[(w - 1) * 4 + 1] + data[(h - 1) * w * 4 + 1] + data[(h * w - 1) * 4 + 1]) / 4,
-    (data[2] + data[(w - 1) * 4 + 2] + data[(h - 1) * w * 4 + 2] + data[(h * w - 1) * 4 + 2]) / 4,
-  ];
   const step = Math.max(6, tol * 0.35);
   const dist = (i: number, r: number, g: number, b: number) =>
     Math.abs(data[i] - r) + Math.abs(data[i + 1] - g) + Math.abs(data[i + 2] - b);
 
+  // seed eligibility: a color must cover >=16% of the perimeter AND touch >=2
+  // edges — true background zones do, subject parts poking the crop (hat, hair,
+  // collar) don't — so the flood can never start inside the character
+  const counts = new Map<number, number>();
+  const edgeMask = new Map<number, number>();
+  const peri: number[] = [];
+  const bucket = (i: number) =>
+    ((data[i] >> 5) << 6) | ((data[i + 1] >> 5) << 3) | (data[i + 2] >> 5);
+  const addPeri = (i: number, edge: number) => {
+    peri.push(i);
+    const k = bucket(i);
+    counts.set(k, (counts.get(k) || 0) + 1);
+    edgeMask.set(k, (edgeMask.get(k) || 0) | (1 << edge));
+  };
+  for (let x = 0; x < w; x++) {
+    addPeri(x * 4, 0);
+    addPeri(((h - 1) * w + x) * 4, 2);
+  }
+  for (let y = 1; y < h - 1; y++) {
+    addPeri(y * w * 4, 3);
+    addPeri((y * w + (w - 1)) * 4, 1);
+  }
+  const minCount = Math.ceil(peri.length * 0.16);
+  const eligible = (i: number) => {
+    const k = bucket(i);
+    if ((counts.get(k) || 0) < minCount) return false;
+    const m = edgeMask.get(k) || 0;
+    return (m & (m - 1)) !== 0; // >= 2 edges
+  };
+
   const stack: number[] = [];
-  const parents: number[] = [];
-  const push = (x: number, y: number, pr: number, pg: number, pb: number) => {
+  const push = (
+    x: number,
+    y: number,
+    pr: number,
+    pg: number,
+    pb: number,
+    sr: number,
+    sg: number,
+    sb: number,
+  ) => {
     if (x < 0 || y < 0 || x >= w || y >= h) return;
     const i = y * w + x;
     if (visited[i]) return;
-    stack.push(i);
-    parents.push(pr, pg, pb);
+    stack.push(i, pr, pg, pb, sr, sg, sb);
   };
 
-  for (let x = 0; x < w; x++) {
-    const t = x * 4;
-    const b = ((h - 1) * w + x) * 4;
-    push(x, 0, data[t], data[t + 1], data[t + 2]);
-    push(x, h - 1, data[b], data[b + 1], data[b + 2]);
-  }
-  for (let y = 0; y < h; y++) {
-    const l = y * w * 4;
-    const r = (y * w + (w - 1)) * 4;
-    push(0, y, data[l], data[l + 1], data[l + 2]);
-    push(w - 1, y, data[r], data[r + 1], data[r + 2]);
+  for (const i of peri) {
+    if (!eligible(i)) continue;
+    const x = (i / 4) % w;
+    const y = ((i / 4) / w) | 0;
+    const r = data[i];
+    const g = data[i + 1];
+    const b = data[i + 2];
+    push(x, y, r, g, b, r, g, b);
   }
 
   while (stack.length) {
+    const sb = stack.pop()!;
+    const sg = stack.pop()!;
+    const sr = stack.pop()!;
+    const pb = stack.pop()!;
+    const pg = stack.pop()!;
+    const pr = stack.pop()!;
     const i = stack.pop()!;
-    const pr = parents.pop()!;
-    const pg = parents.pop()!;
-    const pb = parents.pop()!;
     if (visited[i]) continue;
     visited[i] = 1;
-    const toSeed = dist(i * 4, seed[0], seed[1], seed[2]);
+    const toSeed = dist(i * 4, sr, sg, sb);
     const toParent = dist(i * 4, pr, pg, pb);
-    if (toSeed > tol && toParent > step) continue;
+    if (toSeed > tol || toParent > step) continue;
     data[i * 4 + 3] = 0;
     const x = i % w;
     const y = (i / w) | 0;
     const r = data[i * 4];
     const g = data[i * 4 + 1];
     const b = data[i * 4 + 2];
-    push(x + 1, y, r, g, b);
-    push(x - 1, y, r, g, b);
-    push(x, y + 1, r, g, b);
-    push(x, y - 1, r, g, b);
+    push(x + 1, y, r, g, b, sr, sg, sb);
+    push(x - 1, y, r, g, b, sr, sg, sb);
+    push(x, y + 1, r, g, b, sr, sg, sb);
+    push(x, y - 1, r, g, b, sr, sg, sb);
+    push(x + 1, y + 1, r, g, b, sr, sg, sb);
+    push(x - 1, y + 1, r, g, b, sr, sg, sb);
+    push(x + 1, y - 1, r, g, b, sr, sg, sb);
+    push(x - 1, y - 1, r, g, b, sr, sg, sb);
   }
 
   ctx.putImageData(new ImageData(data, w, h), 0, 0);
@@ -370,8 +406,13 @@ export default function Studio() {
           ? `${ids.length} chog${ids.length > 1 ? "s" : ""} in this wallet`
           : "no chog genesis nfts found in this wallet",
       );
-    } catch {
-      setWalletMsg("couldn't read the chain — try again or use token id");
+    } catch (e) {
+      const detail = e instanceof Error ? e.message.trim() : "";
+      setWalletMsg(
+        detail && !/^wallet lookup failed$/i.test(detail)
+          ? `couldn't read the chain — ${detail}`
+          : "couldn't read the chain — try again or use token id",
+      );
     } finally {
       setWalletBusy(false);
     }

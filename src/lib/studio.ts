@@ -33,7 +33,10 @@ export async function findOwnedChogs(address: string): Promise<number[]> {
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ address: address.trim() }),
   });
-  if (!r.ok) throw new Error("wallet lookup failed");
+  if (!r.ok) {
+    const j = (await r.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(j?.error || "wallet lookup failed");
+  }
   const j = (await r.json()) as { ids?: number[] };
   if (!Array.isArray(j.ids)) throw new Error("bad lookup response");
   return j.ids;

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { AnimatePresence } from "framer-motion";
 import Boot from "@/components/Boot";
 import Nav from "@/components/Nav";
+import MarketTicker from "@/components/MarketTicker";
 import Hero from "@/components/Hero";
 import Marquee from "@/components/Marquee";
 import Wall from "@/components/Wall";
@@ -90,6 +91,7 @@ export default function Site() {
         {!booted && <Boot key="boot" progress={progress} ready={Boolean(list)} />}
       </AnimatePresence>
       <Nav ready={booted} />
+      <MarketTicker />
       <main>
         <Hero ready={booted} chogs={list} />
         <Marquee />

@@ -70,6 +70,7 @@ export default function Nav({ ready }: { ready: boolean }) {
   return (
     <>
       <motion.header
+        data-nav
         initial={{ y: -80, opacity: 0 }}
         animate={ready ? { y: 0, opacity: 1 } : {}}
         transition={{ delay: 0.5, duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
