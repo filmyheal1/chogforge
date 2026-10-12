@@ -17,13 +17,6 @@ export default function StudioFooter() {
           <img src="/chog-token.webp" alt="" />
         </a>
       </div>
-      <div className="contact">
-        <div className="socials">
-          <span aria-label="LinkedIn">
-            <img src="/linkedin.svg" alt="" width="35" height="35" />
-          </span>
-        </div>
-      </div>
     </footer>
   );
 }

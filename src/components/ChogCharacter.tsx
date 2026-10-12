@@ -25,6 +25,7 @@ export default function ChogCharacter() {
     const img = new Image();
     let frame = 0;
     let disposed = false;
+    let inView = true;
     let pointer: { x: number; y: number } | null = null;
     const mobile = window.matchMedia('(max-width: 700px)');
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -96,7 +97,8 @@ export default function ChogCharacter() {
     };
 
     const schedule = () => {
-      if (!frame && !disposed) frame = requestAnimationFrame(tick);
+      if (!inView || disposed) return;
+      if (!frame) frame = requestAnimationFrame(tick);
     };
 
     const onPointer = (event: PointerEvent) => {
@@ -118,6 +120,17 @@ export default function ChogCharacter() {
     window.addEventListener('pointermove', onPointer, { passive: true });
     window.addEventListener('resize', onUpdate);
     window.addEventListener('scroll', onUpdate, { passive: true });
+    const io =
+      typeof IntersectionObserver !== 'undefined'
+        ? new IntersectionObserver(
+            ([entry]) => {
+              inView = entry.isIntersecting;
+              if (inView) schedule();
+            },
+            { rootMargin: '120px' },
+          )
+        : null;
+    io?.observe(wrap);
     mobile.addEventListener('change', onMedia);
     reduced.addEventListener('change', onMedia);
     img.addEventListener('load', ready);
@@ -130,6 +143,7 @@ export default function ChogCharacter() {
       window.removeEventListener('pointermove', onPointer);
       window.removeEventListener('resize', onUpdate);
       window.removeEventListener('scroll', onUpdate);
+      io?.disconnect();
       mobile.removeEventListener('change', onMedia);
       reduced.removeEventListener('change', onMedia);
       img.removeEventListener('load', ready);

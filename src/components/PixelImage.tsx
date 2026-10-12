@@ -219,7 +219,7 @@ export default function PixelImage({
         ref={imgRef}
         src={src ?? undefined}
         alt={alt}
-        decoding="sync"
+        decoding="async"
         className={className}
         onError={(e) => {
           const el = e.currentTarget;

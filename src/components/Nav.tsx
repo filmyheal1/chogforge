@@ -40,7 +40,7 @@ export default function Nav({ ready }: { ready: boolean }) {
         initial={{ y: -80, opacity: 0 }}
         animate={ready ? { y: 0, opacity: 1 } : {}}
         transition={{ delay: 0.5, duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
-        className="fixed inset-x-0 top-0 z-40 flex items-center justify-between border-b border-line bg-bone/85 px-4 py-4 backdrop-blur-md md:px-8"
+        className="fixed inset-x-0 top-0 z-40 flex items-center justify-between border-b border-line bg-bone px-4 py-4 md:px-8"
       >
         <a
           href="#top"
@@ -49,7 +49,7 @@ export default function Nav({ ready }: { ready: boolean }) {
           Chog<span className="text-purple">forge</span>
         </a>
 
-        <nav className="flex items-center gap-1 rounded-full border border-line bg-bone/70 px-2 py-1.5 backdrop-blur-md">
+        <nav className="flex items-center gap-1 rounded-full border border-line bg-bone px-2 py-1.5">
           {LINKS.map((l) => (
             <a
               key={l.id}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   TRAIT_KEYS,
@@ -32,6 +32,42 @@ function CellImage({
     />
   );
 }
+
+const Cell = memo(function Cell({
+  chog,
+  cell,
+  onOpen,
+}: {
+  chog: EnrichedChog;
+  cell: number;
+  onOpen: (c: EnrichedChog) => void;
+}) {
+  return (
+    <button
+      onClick={() => onOpen(chog)}
+      className="cell group relative cursor-crosshair overflow-hidden border-r border-b border-line outline-none"
+      style={{ height: cell }}
+      aria-label={`Open ${chog.name}`}
+    >
+      <CellImage
+        chog={chog}
+        className="duotone absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.06]"
+      />
+      <div className="absolute inset-x-0 bottom-0 translate-y-full bg-ink/85 px-2 py-1.5 text-left transition-transform duration-300 group-hover:translate-y-0">
+        <div className="truncate font-mono text-[9px] uppercase tracking-widest text-bone">
+          {chog.name}
+        </div>
+        <div className="flex justify-between font-mono text-[9px] uppercase tracking-widest text-purple">
+          <span>{chog.Tier}</span>
+          <span>#{chog.rank}</span>
+        </div>
+      </div>
+      <span className="absolute left-1.5 top-1.5 font-mono text-[8px] tabular-nums text-ink/35 opacity-0 transition-opacity group-hover:opacity-100">
+        {chog.id}
+      </span>
+    </button>
+  );
+});
 
 export default function Wall({ list }: { list: EnrichedChog[] | null }) {
   const [query, setQuery] = useState("");
@@ -82,21 +118,22 @@ export default function Wall({ list }: { list: EnrichedChog[] | null }) {
         ...m,
         width: rect.width,
         top: rect.top + window.scrollY,
+        scroll: window.scrollY,
         viewport: window.innerHeight,
       }));
     };
     measure();
 
+    let ticking = false;
     const onScroll = () => {
-      const rect = wrap.getBoundingClientRect();
-      setMetrics((m) => ({
-        ...m,
-        scroll: window.scrollY,
-        top: rect.top + window.scrollY,
-        viewport: window.innerHeight,
-      }));
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(() => {
+        ticking = false;
+        const y = window.scrollY;
+        setMetrics((m) => (m.scroll === y ? m : { ...m, scroll: y }));
+      });
     };
-    onScroll();
     window.addEventListener("scroll", onScroll, { passive: true });
     const ro = new ResizeObserver(measure);
     ro.observe(wrap);
@@ -135,7 +172,7 @@ export default function Wall({ list }: { list: EnrichedChog[] | null }) {
 
   return (
     <section id="wall" className="relative border-b border-line">
-      <div className="sticky top-[59px] z-30 border-b border-line bg-bone/92 backdrop-blur-md">
+      <div className="sticky top-[59px] z-30 border-b border-line bg-bone">
         <div className="flex flex-col gap-3 px-4 py-4 md:px-8">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div className="flex items-baseline gap-4">
@@ -219,30 +256,7 @@ export default function Wall({ list }: { list: EnrichedChog[] | null }) {
               }}
             >
               {visible.map((c) => (
-                <button
-                  key={c.id}
-                  onClick={() => setSelected(c)}
-                  className="cell shimmer group relative cursor-crosshair overflow-hidden border-r border-b border-line outline-none"
-                  style={{ height: cell }}
-                  aria-label={`Open ${c.name}`}
-                >
-                  <CellImage
-                    chog={c}
-                    className="duotone absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.06]"
-                  />
-                  <div className="absolute inset-x-0 bottom-0 translate-y-full bg-ink/85 px-2 py-1.5 text-left backdrop-blur-sm transition-transform duration-300 group-hover:translate-y-0">
-                    <div className="truncate font-mono text-[9px] uppercase tracking-widest text-bone">
-                      {c.name}
-                    </div>
-                    <div className="flex justify-between font-mono text-[9px] uppercase tracking-widest text-purple">
-                      <span>{c.Tier}</span>
-                      <span>#{c.rank}</span>
-                    </div>
-                  </div>
-                  <span className="absolute left-1.5 top-1.5 font-mono text-[8px] tabular-nums text-ink/35 opacity-0 transition-opacity group-hover:opacity-100">
-                    {c.id}
-                  </span>
-                </button>
+                <Cell key={c.id} chog={c} cell={cell} onOpen={setSelected} />
               ))}
             </div>
           </div>

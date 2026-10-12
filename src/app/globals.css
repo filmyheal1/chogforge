@@ -79,6 +79,10 @@ body {
   transition: filter 0.45s ease;
 }
 
+.cell {
+  background: var(--color-bone-2);
+}
+
 .cell:hover .duotone {
   filter: grayscale(0) contrast(1);
 }

@@ -128,6 +128,24 @@ export default function Hero({
               View collection ↗
             </a>
           </motion.div>
+
+          <motion.a
+            initial={{ opacity: 0, y: 16 }}
+            animate={ready ? { opacity: 1, y: 0 } : {}}
+            transition={{ delay: 1.15, duration: 0.7 }}
+            href="https://opensea.io/token/monad/0x350035555e10d9afaf1566aaebfced5ba6c27777"
+            target="_blank"
+            rel="noreferrer"
+            title="Open $CHOG on OpenSea"
+            className="w-fit font-mono text-[11px] tracking-wide text-ash transition-colors hover:text-purple"
+          >
+            <span className="font-semibold text-purple">$CHOG</span>
+            <span className="mx-1.5 text-ash/50">ca</span>
+            <span className="break-all tabular-nums">
+              0x350035555e10d9afaf1566aaebfced5ba6c27777
+            </span>
+            <span className="ml-1.5">↗</span>
+          </motion.a>
         </div>
 
         <motion.div
