@@ -36,6 +36,8 @@ type EditorState = {
   ringColor: string;
   ringW: number;
   stickers: Sticker[];
+  pixelOn: boolean;
+  pixelSize: number;
 };
 
 const DEFAULT_EDITOR: EditorState = {
@@ -51,6 +53,8 @@ const DEFAULT_EDITOR: EditorState = {
   ringColor: "#7856ff",
   ringW: 18,
   stickers: [],
+  pixelOn: false,
+  pixelSize: 32,
 };
 
 function loadImage(src: string, fallback?: string | null): Promise<HTMLImageElement> {
@@ -359,6 +363,29 @@ function drawScene(
     ctx.restore();
   };
 
+  const applyPixel = () => {
+    if (!ed.pixelOn) return;
+    const n = Math.max(8, Math.min(128, ed.pixelSize));
+    const ph = Math.max(1, Math.round((n * H) / W));
+    const src2 = document.createElement("canvas");
+    src2.width = W;
+    src2.height = H;
+    const sctx = src2.getContext("2d");
+    const off = document.createElement("canvas");
+    off.width = n;
+    off.height = ph;
+    const octx = off.getContext("2d");
+    if (sctx && octx) {
+      sctx.drawImage(ctx.canvas, 0, 0, W, H);
+      octx.imageSmoothingEnabled = true;
+      octx.drawImage(src2, 0, 0, n, ph);
+      ctx.imageSmoothingEnabled = false;
+      ctx.clearRect(0, 0, W, H);
+      ctx.drawImage(off, 0, 0, W, H);
+      ctx.imageSmoothingEnabled = true;
+    }
+  };
+
   if (preset === "pfp") {
     drawCover(ctx, src, sw, sh, W, H);
     drawStickers();
@@ -384,6 +411,7 @@ function drawScene(
       ctx.fillText(text, W / 2, ed.textPos === "top" ? H * 0.12 : H * 0.88, W * 0.9);
       ctx.shadowBlur = 0;
     }
+    applyPixel();
     return;
   }
 
@@ -419,6 +447,8 @@ function drawScene(
     ctx.fillText("CHOG GENESIS · MONAD", 58, H / 2 + font * 0.62);
     ctx.globalAlpha = 1;
   }
+
+  applyPixel();
 }
 
 export default function Studio() {
@@ -612,6 +642,16 @@ export default function Studio() {
     } finally {
       setDownloading(false);
     }
+  };
+
+  const print = () => {
+    const c = canvasRef.current;
+    if (!c || !selected) return;
+    const url = c.toDataURL("image/png");
+    const w = window.open("", "_blank", "width=720,height=720");
+    if (!w) return;
+    w.document.write(`<!doctype html><html><head><title>${selected.name}</title><style>html,body{margin:0;height:100%;display:flex;align-items:center;justify-content:center;background:#fff}img{max-width:100%;max-height:100%;image-rendering:pixelated}</style></head><body><img src="${url}" onload="print()"></body></html>`);
+    w.document.close();
   };
 
   const set = <K extends keyof EditorState>(k: K, v: EditorState[K]) =>
@@ -928,9 +968,16 @@ export default function Studio() {
               <button
                 onClick={download}
                 disabled={!selected || !img || downloading}
-                className="ml-auto rounded-full bg-ink px-5 py-2 font-mono text-[11px] uppercase tracking-[0.18em] text-bone transition-colors hover:bg-purple disabled:opacity-40"
+                className="rounded-full bg-ink px-5 py-2 font-mono text-[11px] uppercase tracking-[0.18em] text-bone transition-colors hover:bg-purple disabled:opacity-40"
               >
                 {downloading ? "exporting…" : "download png ↓"}
+              </button>
+              <button
+                onClick={print}
+                disabled={!selected || !img}
+                className="rounded-full border border-line px-5 py-2 font-mono text-[11px] uppercase tracking-[0.18em] text-ash transition-colors hover:border-ink hover:text-ink disabled:opacity-40"
+              >
+                print ⎙
               </button>
             </div>
             {!selected && (
@@ -1175,6 +1222,38 @@ export default function Studio() {
                 >
                   remove selected
                 </button>
+              )}
+            </div>
+
+            <div className="border-t border-line pt-4">
+              <div className="flex items-center justify-between">
+                <span className={label}>pixel mode</span>
+                <button
+                  onClick={() => set("pixelOn", !ed.pixelOn)}
+                  className={`rounded-full border px-3 py-1.5 font-mono text-[10px] uppercase tracking-widest ${
+                    ed.pixelOn
+                      ? "border-purple bg-purple text-white"
+                      : "border-line text-ash hover:border-ink hover:text-ink"
+                  }`}
+                >
+                  {ed.pixelOn ? "on" : "off"}
+                </button>
+              </div>
+              {ed.pixelOn && (
+                <div className="mt-3 flex items-center gap-3">
+                  <input
+                    type="range"
+                    min={8}
+                    max={96}
+                    value={ed.pixelSize}
+                    onChange={(e) => set("pixelSize", Number(e.target.value))}
+                    className="w-full accent-purple"
+                    aria-label="pixel size"
+                  />
+                  <span className="font-mono text-[10px] tabular-nums text-ash">
+                    {ed.pixelSize}px
+                  </span>
+                </div>
               )}
             </div>
 

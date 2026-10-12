@@ -182,6 +182,35 @@ const stats = (page) =>
   await p.waitForTimeout(3000);
   out.removeDefault = await stats(p);
   out.removeDefaultClear = out.removeDefault.clear;
+
+  // pixel mode
+  const pxRow = p
+    .locator("div.flex.items-center.justify-between")
+    .filter({ hasText: "pixel mode" });
+  const pxBtn = pxRow.locator("button");
+  out.pixelLabelOff = (await pxBtn.textContent())?.trim() === "off";
+  await pxBtn.click();
+  await p.waitForTimeout(800);
+  const pixelOn = await stats(p);
+  out.pixelChanged = pixelOn.sum !== out.removeDefault.sum;
+  out.pixelLabelOn = (await pxBtn.textContent())?.trim() === "on";
+  out.pixelSlider = await p.locator('input[aria-label="pixel size"]').isVisible().catch(() => false);
+  await p.screenshot({ path: "refs/shots/st-pixel.png" });
+  await pxBtn.click();
+  await p.waitForTimeout(600);
+  out.pixelOffRestored = (await stats(p)).sum === out.removeDefault.sum;
+
+  // print button present + popup opens
+  out.printBtn = await p
+    .getByRole("button", { name: /print/i })
+    .isVisible()
+    .catch(() => false);
+  const [popup] = await Promise.all([
+    p.waitForEvent("popup", { timeout: 8000 }).catch(() => null),
+    p.getByRole("button", { name: /print/i }).click(),
+  ]);
+  out.printPopup = Boolean(popup);
+  if (popup) await popup.close();
   if (out.removeDefaultClear < 500) {
     await p.locator('input[aria-label="background removal tolerance"]').evaluate((el) => {
       const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
