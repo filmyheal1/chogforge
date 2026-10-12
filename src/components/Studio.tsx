@@ -92,7 +92,7 @@ function removeBackground(
   drawCover(ctx, img, img.naturalWidth, img.naturalHeight, SIZE, SIZE);
 
   const { data, width: w, height: h } = ctx.getImageData(0, 0, SIZE, SIZE);
-  const step = Math.max(4, tol * 0.2);
+  const step = Math.max(4, Math.min(10, tol * 0.2));
 
   const bucket = (r: number, g: number, b: number) =>
     ((r >> 5) << 6) | ((g >> 5) << 3) | (b >> 5);
@@ -147,13 +147,6 @@ function removeBackground(
       }
     }
     return pal;
-  };
-  const nearPal = (r: number, g: number, b: number, pal: Pal) => {
-    for (const p of pal) {
-      if (Math.abs(p.r - r) + Math.abs(p.g - g) + Math.abs(p.b - b) <= 48)
-        return true;
-    }
-    return false;
   };
   const centerPal = buildPal((w * 0.38) | 0, (h * 0.38) | 0, (w * 0.62) | 0, (h * 0.62) | 0);
   const torsoPal = buildPal((w * 0.25) | 0, (h * 0.78) | 0, (w * 0.75) | 0, (h * 0.96) | 0);
@@ -214,15 +207,102 @@ function removeBackground(
     regions.push({ size, r: sr / size, g: sg / size, b: sb / size, centerPx });
   }
 
+  const nearSum = new Map<number, [number, number, number, number]>();
+  let nearN = 0;
+  {
+    // label interior components; only sizable ones count as character interior
+    const islId = new Int32Array(w * h).fill(-1);
+    const islSize: number[] = [];
+    const bfs = new Int32Array(w * h);
+    for (let i = 0; i < w * h; i++) {
+      if (region[i] !== -1 || islId[i] !== -1) continue;
+      const id = islSize.length;
+      let head = 0;
+      let tail = 0;
+      bfs[tail++] = i;
+      islId[i] = id;
+      let size = 0;
+      while (head < tail) {
+        const a = bfs[head++];
+        size++;
+        const ax = a % w;
+        const ay = (a / w) | 0;
+        const push = (n: number) => {
+          if (region[n] === -1 && islId[n] === -1 && dist(a, n) <= 48) {
+            islId[n] = id;
+            bfs[tail++] = n;
+          }
+        };
+        if (ax > 0) push(a - 1);
+        if (ax < w - 1) push(a + 1);
+        if (ay > 0) push(a - w);
+        if (ay < h - 1) push(a + w);
+      }
+      islSize.push(size);
+    }
+    const islMin = Math.max(2000, w * h * 0.0015);
+    // colors of border regions that touch a big interior directly: laser beams
+    // crossing the face, hat shading around noise specks, collar fills
+    for (let i = 0; i < w * h; i++) {
+      if (region[i] === -1) continue;
+      const x = i % w;
+      const y = (i / w) | 0;
+      const touches =
+        (x > 0 && islId[i - 1] >= 0 && islSize[islId[i - 1]] >= islMin) ||
+        (x < w - 1 && islId[i + 1] >= 0 && islSize[islId[i + 1]] >= islMin) ||
+        (y > 0 && islId[i - w] >= 0 && islSize[islId[i - w]] >= islMin) ||
+        (y < h - 1 && islId[i + w] >= 0 && islSize[islId[i + w]] >= islMin);
+      if (!touches) continue;
+      const k = bucket(data[i * 4], data[i * 4 + 1], data[i * 4 + 2]);
+      const s = nearSum.get(k) || [0, 0, 0, 0];
+      s[0] += data[i * 4];
+      s[1] += data[i * 4 + 1];
+      s[2] += data[i * 4 + 2];
+      s[3]++;
+      nearSum.set(k, s);
+      nearN++;
+    }
+  }
+  const nearMin = Math.max(100, nearN * 0.04);
+  const adjPal: Pal = [];
+  for (const [k, s] of nearSum) {
+    if (s[3] >= nearMin && !ringDominant(k)) {
+      adjPal.push({ r: s[0] / s[3], g: s[1] / s[3], b: s[2] / s[3] });
+    }
+  }
+
   // keep a border region only if it looks like the character: it covers a real
   // slice of the center box (hat/head), or its color matches the face or the
   // torso palette; huge regions may not lean on palette matching (that only
   // ever lets background through), and anything else is background
-  const clearReg = regions.map((reg) => {
+  const bestDist = (r: number, g: number, b: number, pal: Pal) => {
+    let d = 999;
+    for (const p of pal) {
+      const dd =
+        Math.abs(p.r - r) + Math.abs(p.g - g) + Math.abs(p.b - b);
+      if (dd < d) d = dd;
+    }
+    return d;
+  };
+  const clearReg = regions.map((reg, rid) => {
+    void rid;
     const centerFrac = reg.centerPx / Math.max(1, boxArea);
-    const nearC = nearPal(reg.r, reg.g, reg.b, centerPal);
-    const nearT = nearPal(reg.r, reg.g, reg.b, torsoPal);
-    return centerFrac < 0.04 && !(reg.size < w * h * 0.2 && (nearC || nearT));
+    const dC = bestDist(reg.r, reg.g, reg.b, centerPal);
+    const dT = bestDist(reg.r, reg.g, reg.b, torsoPal);
+    const dA = bestDist(reg.r, reg.g, reg.b, adjPal);
+    const nearC = dC <= 48;
+    const nearT = dT <= 48;
+    const nearA = dA <= 48;
+    // box palettes (face/torso) may protect any region up to 20% of the image;
+    // adjacency colors are weaker evidence and only protect small fragments
+    // (< 8%): laser beams, hat shading, collar fills crossing the face
+    return (
+      centerFrac < 0.04 &&
+      !(
+        reg.size < w * h * 0.2 &&
+        (nearC || nearT || (reg.size < w * h * 0.08 && nearA))
+      )
+    );
   });
   for (let i = 0; i < w * h; i++) {
     const rid = region[i];
