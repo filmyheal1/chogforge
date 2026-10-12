@@ -106,7 +106,7 @@ export default function Wall({ list }: { list: EnrichedChog[] | null }) {
     };
   }, []);
 
-  const cols = Math.max(2, Math.min(12, Math.floor(metrics.width / 150) || 6));
+  const cols = Math.max(2, Math.min(28, Math.floor(metrics.width / 75) || 6));
   const cell = metrics.width > 0 ? metrics.width / cols : 0;
   const rowCount = Math.ceil(filtered.length / cols);
   const totalHeight = rowCount * cell;
