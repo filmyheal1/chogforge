@@ -17,6 +17,16 @@
 
 html {
   scroll-behavior: smooth;
+  color-scheme: light;
+}
+
+html.dark {
+  color-scheme: dark;
+  --color-bone: #141210;
+  --color-bone-2: #1e1b18;
+  --color-ink: #ece7de;
+  --color-ash: #9d978b;
+  --color-line: #ece7de30;
 }
 
 body {
@@ -75,12 +85,80 @@ body {
 }
 
 .duotone {
-  filter: grayscale(1) contrast(1.05);
+  filter: grayscale(1) brightness(1.28) contrast(0.88);
   transition: filter 0.45s ease;
 }
 
 .cell {
   background: var(--color-bone-2);
+}
+
+.cell::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    115deg,
+    transparent 30%,
+    rgb(255 255 255 / 0.55) 47%,
+    rgb(255 255 255 / 0.2) 53%,
+    transparent 70%
+  );
+  transform: translateX(-100%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.cell:hover::after {
+  animation: cellSweep 0.55s ease-out;
+}
+
+.cell-glint::before {
+  content: "";
+  position: absolute;
+  inset: -40%;
+  z-index: 2;
+  background: linear-gradient(
+    115deg,
+    transparent 42%,
+    rgb(255 255 255 / 0.9) 50%,
+    transparent 58%
+  );
+  transform: translateX(-130%);
+  animation: cellGlint 5s ease-in-out infinite;
+  animation-delay: var(--gd, 0s);
+  pointer-events: none;
+}
+
+@keyframes cellSweep {
+  from {
+    transform: translateX(-100%);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(100%);
+    opacity: 1;
+  }
+}
+
+@keyframes cellGlint {
+  0%,
+  84% {
+    transform: translateX(-130%);
+    opacity: 0;
+  }
+  86% {
+    opacity: 1;
+  }
+  94% {
+    transform: translateX(130%);
+    opacity: 1;
+  }
+  96%,
+  100% {
+    transform: translateX(130%);
+    opacity: 0;
+  }
 }
 
 .cell:hover .duotone {
@@ -120,7 +198,9 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .marquee-track,
   .grain::after,
-  .shimmer {
+  .shimmer,
+  .cell-glint::before,
+  .cell:hover::after {
     animation: none;
   }
   html {

@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   TRAIT_KEYS,
@@ -42,11 +42,19 @@ const Cell = memo(function Cell({
   cell: number;
   onOpen: (c: EnrichedChog) => void;
 }) {
+  const rare = chog.rank <= 100;
   return (
     <button
       onClick={() => onOpen(chog)}
-      className="cell group relative cursor-crosshair overflow-hidden border-r border-b border-line outline-none"
-      style={{ height: cell }}
+      className={`cell group relative cursor-crosshair overflow-hidden border-r border-b border-line outline-none${
+        rare ? " cell-glint" : ""
+      }`}
+      style={
+        {
+          height: cell,
+          ...(rare ? { "--gd": `${-(chog.rank % 5) * 0.9}s` } : {}),
+        } as CSSProperties
+      }
       aria-label={`Open ${chog.name}`}
     >
       <CellImage
@@ -288,7 +296,7 @@ export default function Wall({ list }: { list: EnrichedChog[] | null }) {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={() => setSelected(null)}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-ink/75 p-4 backdrop-blur-sm"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm"
           >
             <motion.div
               initial={{ y: 40, opacity: 0, scale: 0.98 }}
@@ -343,14 +351,22 @@ export default function Wall({ list }: { list: EnrichedChog[] | null }) {
                   ))}
                 </div>
 
-                <a
-                  href={openseaUrl(selected.id)}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="mt-auto block rounded-full bg-ink py-3 text-center font-mono text-[11px] uppercase tracking-[0.18em] text-bone transition-colors hover:bg-purple"
-                >
-                  view on OpenSea ↗
-                </a>
+                <div className="mt-auto flex gap-2">
+                  <a
+                    href={`/studio?chog=${selected.id}`}
+                    className="flex-1 rounded-full border border-line py-3 text-center font-mono text-[11px] uppercase tracking-[0.18em] transition-colors hover:border-purple hover:text-purple"
+                  >
+                    edit ✎
+                  </a>
+                  <a
+                    href={openseaUrl(selected.id)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex-1 rounded-full bg-ink py-3 text-center font-mono text-[11px] uppercase tracking-[0.18em] text-bone transition-colors hover:bg-purple"
+                  >
+                    OpenSea ↗
+                  </a>
+                </div>
               </div>
             </motion.div>
           </motion.div>

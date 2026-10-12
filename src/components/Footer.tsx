@@ -1,6 +1,7 @@
 import TokenCA from "./TokenCA";
 
 const LINKS = [
+  { label: "pfp studio", href: "/studio" },
   { label: "chog.xyz", href: "https://www.chog.xyz/" },
   { label: "X", href: "https://x.com/ChogNFT" },
   { label: "Discord", href: "https://discord.gg/chog" },
@@ -23,17 +24,21 @@ export default function Footer() {
 
         <div className="flex flex-col gap-3 md:items-end">
           <div className="flex flex-wrap gap-x-4 gap-y-2">
-            {LINKS.map((l) => (
-              <a
-                key={l.label}
-                href={l.href}
-                target="_blank"
-                rel="noreferrer"
-                className="font-mono text-[11px] uppercase tracking-[0.18em] text-ash transition-colors hover:text-purple"
-              >
-                {l.label} ↗
-              </a>
-            ))}
+            {LINKS.map((l) => {
+              const internal = l.href.startsWith("/");
+              return (
+                <a
+                  key={l.label}
+                  href={l.href}
+                  target={internal ? undefined : "_blank"}
+                  rel={internal ? undefined : "noreferrer"}
+                  className="font-mono text-[11px] uppercase tracking-[0.18em] text-ash transition-colors hover:text-purple"
+                >
+                  {l.label}
+                  {internal ? "" : " ↗"}
+                </a>
+              );
+            })}
           </div>
           <TokenCA />
           <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-ash/70">

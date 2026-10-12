@@ -255,3 +255,9 @@ body:has(.footer-route) {
     height: 100%;
   }
 }
+
+@media (max-width: 900px) {
+  .logo {
+    display: none;
+  }
+}

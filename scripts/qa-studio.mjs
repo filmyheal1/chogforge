@@ -1,0 +1,240 @@
+import { chromium } from "playwright";
+
+const base = process.env.BASE || "http://localhost:3100";
+const browser = await chromium.launch();
+const out = { errors: [] };
+
+function pageErrors(p) {
+  p.on("console", (m) => {
+    if (m.type() === "error") out.errors.push(m.text());
+  });
+  p.on("pageerror", (e) => out.errors.push(String(e)));
+}
+
+const stats = (page) =>
+  page.evaluate(() => {
+    const c = document.querySelector("canvas");
+    if (!c) return { missing: true };
+    try {
+      const d = c.getContext("2d").getImageData(0, 0, c.width, c.height).data;
+      let clear = 0, opaque = 0, sum = 0;
+      for (let i = 0; i < d.length; i += 4) {
+        const a = d[i + 3];
+        if (a < 10) clear++;
+        else if (a > 245) opaque++;
+        if ((i / 4) % 250 === 0) sum = (sum + d[i] + d[i + 1] * 3 + d[i + 2] * 7) % 1000000007;
+      }
+      return { w: c.width, h: c.height, clear, opaque, sum, tainted: false };
+    } catch (e) {
+      return { tainted: true, err: String(e) };
+    }
+  });
+
+// ---------- API sanity ----------
+{
+  const p = await browser.newPage();
+  pageErrors(p);
+  await p.goto(base + "/", { waitUntil: "domcontentloaded", timeout: 60000 });
+  const rpc = await p.evaluate(() =>
+    fetch("/api/rpc", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ method: "eth_chainId", params: [] }),
+    }).then((r) => r.json()),
+  );
+  out.apiRpcChainId = rpc.result;
+  const manifest = await p.evaluate(() => fetch("/data/manifest.json").then((r) => r.json()));
+  out.manifestCount = manifest.length;
+  out.apiImg = await p.evaluate(
+    (s) =>
+      fetch(`/api/img?src=${encodeURIComponent(s)}`).then((r) => ({
+        ok: r.ok,
+        type: r.headers.get("content-type"),
+      })),
+    manifest[0].imageFallback,
+  );
+  out.apiOwned = await p.evaluate(() =>
+    fetch("/api/owned", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ address: "0x3d38fee3e1a4c43d8fcf715aa6c9ff025074e7e0" }),
+    }).then((r) => r.json()),
+  );
+  await p.close();
+}
+
+// ---------- home entries ----------
+{
+  const p = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  pageErrors(p);
+  await p.goto(base + "/", { waitUntil: "domcontentloaded", timeout: 60000 });
+  await p.waitForTimeout(3500);
+  out.navStudio = await p.locator('header a[href="/studio"]').isVisible().catch(() => false);
+  out.footerStudio = await p.locator('footer a[href="/studio"]').count();
+  await p.evaluate(() => {
+    document.documentElement.style.scrollBehavior = "auto";
+    document.querySelector("#wall")?.scrollIntoView();
+    window.scrollBy(0, 500);
+  });
+  await p.waitForTimeout(900);
+  await p.locator(".cell").nth(20).click();
+  await p.waitForTimeout(700);
+  const edit = p.locator('a[href^="/studio?chog="]');
+  out.modalEdit = await edit.count();
+  out.modalEditHref = out.modalEdit ? await edit.getAttribute("href") : null;
+  await p.screenshot({ path: "refs/shots/st-entry-modal.png" });
+  await p.close();
+}
+
+// ---------- studio desktop ----------
+{
+  const p = await browser.newPage({ viewport: { width: 1440, height: 1000 }, colorScheme: "light" });
+  pageErrors(p);
+  await p.goto(base + "/studio", { waitUntil: "domcontentloaded", timeout: 60000 });
+  await p.waitForTimeout(3000);
+  out.studioCells = await p.locator("button.relative.aspect-square").count();
+  await p.screenshot({ path: "refs/shots/st-light.png" });
+
+  await p.locator("button.relative.aspect-square").first().click();
+  await p.waitForFunction(() => document.body.textContent?.includes("· rank"), null, { timeout: 30000 });
+  await p.waitForTimeout(1200);
+  out.sourceLine = await p.evaluate(() => {
+    const el = [...document.querySelectorAll("p")].find((x) => x.textContent.includes("· rank"));
+    return el ? el.textContent.trim() : null;
+  });
+  out.canvasBase = await stats(p);
+
+  // text on
+  await p.evaluate(() => {
+    const rows = [...document.querySelectorAll("div.flex.items-center.justify-between")];
+    rows.find((r) => r.querySelector("span")?.textContent?.trim() === "text")
+      ?.querySelector("button")
+      ?.click();
+  });
+  await p.waitForTimeout(300);
+  await p.locator('input[placeholder="your text"]').fill("CHOG FOREVER");
+  await p.waitForTimeout(700);
+  out.canvasText = await stats(p);
+  out.textChanged = out.canvasText.sum !== out.canvasBase.sum;
+
+  // ring on
+  await p.evaluate(() => {
+    const rows = [...document.querySelectorAll("div.flex.items-center.justify-between")];
+    rows.find((r) => r.querySelector("span")?.textContent?.trim() === "ring frame")
+      ?.querySelector("button")
+      ?.click();
+  });
+  await p.waitForTimeout(700);
+  out.canvasRing = await stats(p);
+  out.ringChanged = out.canvasRing.sum !== out.canvasText.sum;
+
+  // preset header
+  await p.getByRole("button", { name: /x header/i }).click();
+  await p.waitForTimeout(500);
+  out.headerCanvas = await stats(p);
+  await p.screenshot({ path: "refs/shots/st-header.png" });
+
+  // back to pfp + download
+  await p.getByRole("button", { name: /pfp 1080/i }).click();
+  await p.waitForTimeout(500);
+  const [dl] = await Promise.all([
+    p.waitForEvent("download", { timeout: 20000 }),
+    p.getByRole("button", { name: /download png/i }).click(),
+  ]);
+  out.downloadName = dl.suggestedFilename();
+  await dl.cancel();
+
+  // remove bg at default tolerance
+  await p.getByRole("button", { name: /remove bg/i }).click();
+  await p.waitForTimeout(3000);
+  out.removeDefault = await stats(p);
+  out.removeDefaultClear = out.removeDefault.clear;
+  if (out.removeDefaultClear < 500) {
+    await p.locator('input[aria-label="background removal tolerance"]').evaluate((el) => {
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+      setter.call(el, 140);
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+      el.dispatchEvent(new PointerEvent("pointerup", { bubbles: true }));
+      el.dispatchEvent(new KeyboardEvent("keyup", { key: "Enter", bubbles: true }));
+    });
+    await p.waitForTimeout(3500);
+    out.removeHigh = await stats(p);
+    out.removeHighClear = out.removeHigh.clear;
+  }
+  await p.screenshot({ path: "refs/shots/st-removed-bg.png" });
+
+  // wallet tab (textContent — CSS uppercase affects innerText)
+  await p.getByRole("button", { name: "my wallet" }).click();
+  await p.locator('input[placeholder="0x… wallet address"]').fill("0x3d38fee3e1a4c43d8fcf715aa6c9ff025074e7e0");
+  await p.getByRole("button", { name: /find my chogs/i }).click();
+  await p.waitForFunction(
+    () => /chog(s)? in this wallet|no chog genesis|couldn't read the chain/i.test(document.body.textContent || ""),
+    null,
+    { timeout: 60000 },
+  );
+  out.walletMsg = await p.evaluate(() => {
+    const m = (document.body.textContent || "").match(/.{0,4}chog(s)? in this wallet|no chog genesis[^A-Z]*|couldn't read the chain/i);
+    return m ? m[0].trim() : null;
+  });
+  out.walletCells = await p.locator("button.relative.aspect-square").count();
+  if (out.walletCells > 0) {
+    await p.locator("button.relative.aspect-square").first().click();
+    await p.waitForFunction(
+      () => (document.body.textContent || "").includes("yours"),
+      null,
+      { timeout: 30000 },
+    );
+    out.yoursBadge = await p.evaluate(() => (document.body.textContent || "").includes("yours"));
+  }
+  await p.screenshot({ path: "refs/shots/st-wallet.png" });
+
+  // token id tab
+  await p.getByRole("button", { name: "token id" }).click();
+  await p.locator('input[placeholder*="token id"]').fill("1");
+  await p.getByRole("button", { name: "load", exact: true }).click();
+  await p.waitForFunction(
+    () =>
+      [...document.querySelectorAll("p")].some((x) => x.textContent.includes("#1 ·")),
+    null,
+    { timeout: 15000 },
+  ).catch(() => {});
+  out.idSource = await p.evaluate(() => {
+    const el = [...document.querySelectorAll("p")].find((x) => x.textContent.includes("· rank"));
+    return el ? el.textContent.trim() : null;
+  });
+  await p.close();
+}
+
+// ---------- deep link + dark ----------
+{
+  const p = await browser.newPage({ viewport: { width: 1440, height: 1000 }, colorScheme: "dark" });
+  pageErrors(p);
+  await p.goto(base + "/studio?chog=5", { waitUntil: "domcontentloaded", timeout: 60000 });
+  await p.waitForFunction(() => document.body.textContent?.includes("#5 ·"), null, { timeout: 30000 });
+  await p.waitForTimeout(1500);
+  out.deepLink = await p.evaluate(() => {
+    const el = [...document.querySelectorAll("p")].find((x) => x.textContent.includes("· rank"));
+    return el ? el.textContent.trim() : null;
+  });
+  out.darkStudio = await p.evaluate(() => document.documentElement.classList.contains("dark"));
+  out.canvasDeepLink = await stats(p);
+  await p.screenshot({ path: "refs/shots/st-dark.png" });
+  await p.close();
+}
+
+// ---------- phone ----------
+{
+  const p = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  pageErrors(p);
+  await p.goto(base + "/", { waitUntil: "domcontentloaded", timeout: 60000 });
+  await p.waitForTimeout(3000);
+  out.phoneNavStudio = await p.locator('header a[href="/studio"]').isVisible().catch(() => false);
+  await p.goto(base + "/studio", { waitUntil: "domcontentloaded", timeout: 60000 });
+  await p.waitForTimeout(2500);
+  await p.screenshot({ path: "refs/shots/st-phone.png" });
+  out.phoneOk = await p.locator("button.relative.aspect-square").count();
+  await p.close();
+}
+
+console.log(JSON.stringify(out, null, 1));
+await browser.close();

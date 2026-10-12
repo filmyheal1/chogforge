@@ -49,13 +49,6 @@ export default function Hero({
       id="top"
       className="relative flex min-h-screen flex-col justify-between overflow-hidden border-b border-line px-4 pb-6 pt-24 md:px-8 md:pt-28"
     >
-      {/* vertical hairlines */}
-      <div className="pointer-events-none absolute inset-0 hidden md:block">
-        <div className="absolute inset-y-0 left-1/4 w-px bg-line" />
-        <div className="absolute inset-y-0 left-1/2 w-px bg-line" />
-        <div className="absolute inset-y-0 left-3/4 w-px bg-line" />
-      </div>
-
       <div className="relative grid flex-1 items-center gap-10 md:grid-cols-2 md:gap-8">
         <div className="flex flex-col gap-6">
           <motion.div
@@ -172,23 +165,25 @@ export default function Hero({
         </motion.div>
       </div>
 
-      <div className="relative mt-8 grid grid-cols-2 gap-px border-t border-line pt-4 md:grid-cols-4">
-        {STATS.map((s, i) => (
-          <motion.div
-            key={s.k}
-            initial={{ opacity: 0, y: 10 }}
-            animate={ready ? { opacity: 1, y: 0 } : {}}
-            transition={{ delay: 1.1 + i * 0.07 }}
-            className="flex items-baseline justify-between px-2 md:px-4"
-          >
-            <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-ash">
-              {s.k}
-            </span>
-            <span className="font-sans text-xl font-semibold tabular-nums md:text-2xl">
-              {s.v}
-            </span>
-          </motion.div>
-        ))}
+      <div className="relative mt-8 border-t border-line pt-4">
+        <div className="grid grid-cols-2 gap-px bg-line md:grid-cols-4">
+          {STATS.map((s, i) => (
+            <motion.div
+              key={s.k}
+              initial={{ opacity: 0, y: 10 }}
+              animate={ready ? { opacity: 1, y: 0 } : {}}
+              transition={{ delay: 1.1 + i * 0.07 }}
+              className="flex items-baseline justify-between bg-bone px-2 md:px-4"
+            >
+              <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-ash">
+                {s.k}
+              </span>
+              <span className="font-sans text-xl font-semibold tabular-nums md:text-2xl">
+                {s.v}
+              </span>
+            </motion.div>
+          ))}
+        </div>
       </div>
     </section>
   );

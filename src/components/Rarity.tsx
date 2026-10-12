@@ -5,7 +5,14 @@ import { motion } from "framer-motion";
 import PixelImage from "@/components/PixelImage";
 import { scarcestTrait, tierDistribution, type EnrichedChog } from "@/lib/chog";
 
-const PALETTE = ["#6b665e", "#7856ff", "#ff5c1a", "#ff7ab6", "#111010", "#7ab6ff"];
+const PALETTE = [
+  "var(--color-ash)",
+  "#7856ff",
+  "#ff5c1a",
+  "#ff7ab6",
+  "var(--color-ink)",
+  "#7ab6ff",
+];
 
 export default function Rarity({ list }: { list: EnrichedChog[] | null }) {
   const tiers = useMemo(
