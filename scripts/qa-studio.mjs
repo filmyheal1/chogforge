@@ -144,6 +144,39 @@ const stats = (page) =>
   out.downloadName = dl.suggestedFilename();
   await dl.cancel();
 
+  // stickers
+  out.stickerButtons = await p.locator('button[aria-label^="add sticker"]').count();
+  await p.locator('button[aria-label="add sticker 🔥"]').click();
+  await p.waitForTimeout(600);
+  const stickerBase = await stats(p);
+  out.stickerChanged = stickerBase.sum !== out.canvasBase.sum;
+  const cbox = await p.locator("canvas").boundingBox();
+  await p.mouse.move(cbox.x + cbox.width / 2, cbox.y + cbox.height / 2);
+  await p.mouse.down();
+  await p.mouse.move(cbox.x + cbox.width / 2 + 50, cbox.y + cbox.height / 2 - 40, { steps: 6 });
+  await p.mouse.up();
+  await p.waitForTimeout(600);
+  const stickerDrag = await stats(p);
+  out.stickerDragChanged = stickerDrag.sum !== stickerBase.sum;
+  await p.locator('input[aria-label="sticker size"]').fill("30");
+  await p.waitForTimeout(600);
+  const stickerBig = await stats(p);
+  out.stickerResizeChanged = stickerBig.sum !== stickerDrag.sum;
+  await p.screenshot({ path: "refs/shots/st-sticker.png" });
+  const preRemove = await stats(p);
+  out.removeBtnVisible = await p.getByRole("button", { name: /remove selected/i }).isVisible().catch(() => false);
+  await p.getByRole("button", { name: /remove selected/i }).click();
+  await p.waitForTimeout(600);
+  const postRemove = await stats(p);
+  out.stickerCleared = postRemove.sum !== preRemove.sum;
+  out.preRemoveSum = preRemove.sum;
+  out.postRemoveSum = postRemove.sum;
+  out.removeBtnGone = await p
+    .getByRole("button", { name: /remove selected/i })
+    .isVisible()
+    .then((v) => !v)
+    .catch(() => true);
+
   // remove bg at default tolerance
   await p.getByRole("button", { name: /remove bg/i }).click();
   await p.waitForTimeout(3000);

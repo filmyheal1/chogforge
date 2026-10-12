@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import Link from "next/link";
 import { enrich, type Chog, type EnrichedChog } from "@/lib/chog";
 import { findOwnedChogs, isAddress, verifyOwner } from "@/lib/studio";
@@ -16,9 +16,12 @@ const BG_SWATCHES = [
 ];
 const RING_SWATCHES = ["#131110", "#efe9e1", "#7856ff", "#ff5c1a", "#ffffff"];
 const TEXT_SWATCHES = ["#ffffff", "#131110", "#7856ff", "#ff7ab6", "#ff5c1a"];
+const STICKER_SET = ["🔥", "👑", "🌿", "🐦", "⭐", "💜", "⚡", "💎", "🐸", "☠️", "🌈", "🎯"];
 
 type Preset = "pfp" | "header";
 type Tab = "pick" | "wallet" | "id";
+
+type Sticker = { k: string; x: number; y: number; s: number; r: number };
 
 type EditorState = {
   removeBg: boolean;
@@ -32,6 +35,7 @@ type EditorState = {
   ringOn: boolean;
   ringColor: string;
   ringW: number;
+  stickers: Sticker[];
 };
 
 const DEFAULT_EDITOR: EditorState = {
@@ -46,6 +50,7 @@ const DEFAULT_EDITOR: EditorState = {
   ringOn: false,
   ringColor: "#7856ff",
   ringW: 18,
+  stickers: [],
 };
 
 function loadImage(src: string, fallback?: string | null): Promise<HTMLImageElement> {
@@ -322,6 +327,7 @@ function drawScene(
   sw: number,
   sh: number,
   ed: EditorState,
+  sel = -1,
 ) {
   ctx.clearRect(0, 0, W, H);
   if (ed.bg !== "transparent") {
@@ -330,8 +336,32 @@ function drawScene(
   }
   const text = ed.text.trim() || "MY CHOG";
 
+  const drawStickers = () => {
+    ctx.save();
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ed.stickers.forEach((st, i) => {
+      const font = Math.max(12, Math.round(st.s * W));
+      ctx.save();
+      ctx.translate(st.x * W, st.y * H);
+      ctx.rotate(st.r);
+      ctx.font = `${font}px "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif`;
+      ctx.fillText(st.k, 0, 0);
+      if (i === sel) {
+        ctx.strokeStyle = "#7856ff";
+        ctx.lineWidth = Math.max(2, font * 0.06);
+        ctx.setLineDash([font * 0.12, font * 0.08]);
+        ctx.strokeRect(-font * 0.55, -font * 0.55, font * 1.1, font * 1.1);
+        ctx.setLineDash([]);
+      }
+      ctx.restore();
+    });
+    ctx.restore();
+  };
+
   if (preset === "pfp") {
     drawCover(ctx, src, sw, sh, W, H);
+    drawStickers();
     if (ed.ringOn) {
       ctx.beginPath();
       ctx.arc(W / 2, H / 2, W / 2 - 10 - ed.ringW / 2, 0, Math.PI * 2);
@@ -361,6 +391,7 @@ function drawScene(
   const x = W - s - 48;
   const y = (H - s) / 2;
   ctx.drawImage(src, x, y, s, s);
+  drawStickers();
   if (ed.ringOn) {
     ctx.beginPath();
     ctx.arc(x + s / 2, y + s / 2, s / 2 - 6 - ed.ringW / 2, 0, Math.PI * 2);
@@ -408,8 +439,12 @@ export default function Studio() {
   const [preset, setPreset] = useState<Preset>("pfp");
   const [tolDraft, setTolDraft] = useState(DEFAULT_EDITOR.tolerance);
   const [downloading, setDownloading] = useState(false);
+  const [selSticker, setSelSticker] = useState(-1);
+  const [stickerSize, setStickerSize] = useState(14);
+  const [stickerRot, setStickerRot] = useState(0);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const loadToken = useRef(0);
+  const dragRef = useRef<{ i: number; dx: number; dy: number } | null>(null);
 
   const pick = (c: EnrichedChog) => {
     const token = ++loadToken.current;
@@ -493,8 +528,8 @@ export default function Studio() {
       masked instanceof HTMLImageElement ? masked.naturalWidth : masked.width;
     const sh =
       masked instanceof HTMLImageElement ? masked.naturalHeight : masked.height;
-    drawScene(ctx, W, H, preset, masked, sw, sh, ed);
-  }, [masked, preset, ed]);
+    drawScene(ctx, W, H, preset, masked, sw, sh, ed, selSticker);
+  }, [masked, preset, ed, selSticker]);
 
   const results = useMemo(() => {
     if (!list) return [];
@@ -581,6 +616,113 @@ export default function Studio() {
 
   const set = <K extends keyof EditorState>(k: K, v: EditorState[K]) =>
     setEd((s) => ({ ...s, [k]: v }));
+
+  const canvasPt = (e: ReactPointerEvent<HTMLCanvasElement>) => {
+    const c = canvasRef.current;
+    if (!c) return { px: 0, py: 0, W: 1, H: 1 };
+    const r = c.getBoundingClientRect();
+    return {
+      px: ((e.clientX - r.left) / Math.max(1, r.width)) * c.width,
+      py: ((e.clientY - r.top) / Math.max(1, r.height)) * c.height,
+      W: c.width,
+      H: c.height,
+    };
+  };
+
+  const hitSticker = (px: number, py: number, W: number, H: number) => {
+    for (let i = ed.stickers.length - 1; i >= 0; i--) {
+      const st = ed.stickers[i];
+      const size = Math.max(12, st.s * W);
+      const cx = st.x * W;
+      const cy = st.y * H;
+      const cos = Math.cos(-st.r);
+      const sin = Math.sin(-st.r);
+      const dx = px - cx;
+      const dy = py - cy;
+      const lx = dx * cos - dy * sin;
+      const ly = dx * sin + dy * cos;
+      if (Math.abs(lx) <= size * 0.55 && Math.abs(ly) <= size * 0.55) return i;
+    }
+    return -1;
+  };
+
+  const onCanvasDown = (e: ReactPointerEvent<HTMLCanvasElement>) => {
+    if (!masked) return;
+    const { px, py, W, H } = canvasPt(e);
+    const i = hitSticker(px, py, W, H);
+    setSelSticker(i);
+    if (i >= 0) {
+      const st = ed.stickers[i];
+      dragRef.current = { i, dx: px - st.x * W, dy: py - st.y * H };
+      e.currentTarget.setPointerCapture(e.pointerId);
+    }
+  };
+
+  const onCanvasMove = (e: ReactPointerEvent<HTMLCanvasElement>) => {
+    const drag = dragRef.current;
+    if (!drag) return;
+    const { px, py, W, H } = canvasPt(e);
+    setEd((s) => {
+      const stickers = s.stickers.slice();
+      const st = stickers[drag.i];
+      if (!st) return s;
+      stickers[drag.i] = {
+        ...st,
+        x: Math.min(1, Math.max(0, (px - drag.dx) / W)),
+        y: Math.min(1, Math.max(0, (py - drag.dy) / H)),
+      };
+      return { ...s, stickers };
+    });
+  };
+
+  const onCanvasUp = () => {
+    if (dragRef.current) {
+      dragRef.current = null;
+      return;
+    }
+    if (selSticker >= 0) setSelSticker(-1);
+  };
+
+  const addSticker = (k: string) => {
+    setEd((s) => ({
+      ...s,
+      stickers: [
+        ...s.stickers,
+        { k, x: 0.5, y: 0.5, s: stickerSize / 100, r: (stickerRot * Math.PI) / 180 },
+      ],
+    }));
+    setSelSticker(ed.stickers.length);
+  };
+
+  const updateSelSticker = (patch: Partial<Sticker>) => {
+    if (selSticker < 0) return;
+    setEd((s) => {
+      const stickers = s.stickers.slice();
+      const st = stickers[selSticker];
+      if (!st) return s;
+      stickers[selSticker] = { ...st, ...patch };
+      return { ...s, stickers };
+    });
+  };
+
+  const updateStickerSize = (v: number) => {
+    setStickerSize(v);
+    updateSelSticker({ s: v / 100 });
+  };
+
+  const updateStickerRot = (v: number) => {
+    setStickerRot(v);
+    updateSelSticker({ r: (v * Math.PI) / 180 });
+  };
+
+  const removeSelSticker = () => {
+    if (selSticker < 0) return;
+    setEd((s) => ({
+      ...s,
+      stickers: s.stickers.filter((_, i) => i !== selSticker),
+    }));
+    setSelSticker(-1);
+  };
 
   const tabBtn = (t: Tab, label: string) => (
     <button
@@ -751,11 +893,15 @@ export default function Studio() {
             >
               <canvas
                 ref={canvasRef}
-                className={
+                onPointerDown={onCanvasDown}
+                onPointerMove={onCanvasMove}
+                onPointerUp={onCanvasUp}
+                onPointerCancel={onCanvasUp}
+                className={`touch-none ${
                   preset === "pfp"
                     ? "h-[400px] w-[400px] max-w-full"
                     : "w-full max-w-[700px]"
-                }
+                } ${masked ? "cursor-crosshair" : ""}`}
               />
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -964,10 +1110,79 @@ export default function Studio() {
               )}
             </div>
 
+            <div className="border-t border-line pt-4">
+              <div className="flex items-center justify-between">
+                <span className={label}>stickers</span>
+                {ed.stickers.length > 0 && (
+                  <button
+                    onClick={() => {
+                      set("stickers", []);
+                      setSelSticker(-1);
+                    }}
+                    className="rounded-full border border-line px-3 py-1.5 font-mono text-[10px] uppercase tracking-widest text-ash hover:border-ink hover:text-ink"
+                  >
+                    clear all
+                  </button>
+                )}
+              </div>
+              <div className="mt-3 grid grid-cols-6 gap-1.5">
+                {STICKER_SET.map((k) => (
+                  <button
+                    key={k}
+                    onClick={() => addSticker(k)}
+                    disabled={!masked}
+                    aria-label={`add sticker ${k}`}
+                    className="flex h-9 items-center justify-center rounded border border-line text-lg transition-colors hover:border-purple disabled:opacity-40"
+                  >
+                    {k}
+                  </button>
+                ))}
+              </div>
+              <div className="mt-3 flex items-center gap-3">
+                <span className={`${label} shrink-0`}>size</span>
+                <input
+                  type="range"
+                  min={5}
+                  max={40}
+                  value={stickerSize}
+                  onChange={(e) => updateStickerSize(Number(e.target.value))}
+                  className="w-full accent-purple"
+                  aria-label="sticker size"
+                />
+                <span className="font-mono text-[10px] tabular-nums text-ash">
+                  {stickerSize}
+                </span>
+              </div>
+              <div className="mt-2 flex items-center gap-3">
+                <span className={`${label} shrink-0`}>rotate</span>
+                <input
+                  type="range"
+                  min={-180}
+                  max={180}
+                  value={stickerRot}
+                  onChange={(e) => updateStickerRot(Number(e.target.value))}
+                  className="w-full accent-purple"
+                  aria-label="sticker rotation"
+                />
+                <span className="font-mono text-[10px] tabular-nums text-ash">
+                  {stickerRot}°
+                </span>
+              </div>
+              {selSticker >= 0 && (
+                <button
+                  onClick={removeSelSticker}
+                  className="mt-3 rounded-full border border-line px-3 py-1.5 font-mono text-[10px] uppercase tracking-widest text-ash hover:border-ink hover:text-ink"
+                >
+                  remove selected
+                </button>
+              )}
+            </div>
+
             <button
               onClick={() => {
                 setEd(DEFAULT_EDITOR);
                 setTolDraft(DEFAULT_EDITOR.tolerance);
+                setSelSticker(-1);
               }}
               className="mt-1 self-start rounded-full border border-line px-4 py-2 font-mono text-[10px] uppercase tracking-widest text-ash hover:border-ink hover:text-ink"
             >
