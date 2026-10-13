@@ -17,11 +17,13 @@ const BG_SWATCHES = [
 const RING_SWATCHES = ["#131110", "#efe9e1", "#7856ff", "#ff5c1a", "#ffffff"];
 const TEXT_SWATCHES = ["#ffffff", "#131110", "#7856ff", "#ff7ab6", "#ff5c1a"];
 const STICKER_SET = ["🔥", "👑", "🌿", "🐦", "⭐", "💜", "⚡", "💎", "🐸", "☠️", "🌈", "🎯"];
+const DRAW_SWATCHES = ["#131110", "#ffffff", "#7856ff", "#ff5c1a", "#ff7ab6", "#22c55e"];
 
 type Preset = "pfp" | "header";
 type Tab = "pick" | "wallet" | "id";
 
 type Sticker = { k: string; x: number; y: number; s: number; r: number };
+type Stroke = { c: string; w: number; pts: number[] };
 
 type EditorState = {
   removeBg: boolean;
@@ -36,6 +38,7 @@ type EditorState = {
   ringColor: string;
   ringW: number;
   stickers: Sticker[];
+  strokes: Stroke[];
   pixelOn: boolean;
   pixelSize: number;
 };
@@ -53,6 +56,7 @@ const DEFAULT_EDITOR: EditorState = {
   ringColor: "#7856ff",
   ringW: 18,
   stickers: [],
+  strokes: [],
   pixelOn: false,
   pixelSize: 32,
 };
@@ -363,6 +367,32 @@ function drawScene(
     ctx.restore();
   };
 
+  const drawStrokes = () => {
+    if (!ed.strokes.length) return;
+    ctx.save();
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    for (const s of ed.strokes) {
+      const lw = Math.max(1, s.w * W);
+      ctx.strokeStyle = s.c;
+      ctx.fillStyle = s.c;
+      ctx.lineWidth = lw;
+      if (s.pts.length < 4) {
+        ctx.beginPath();
+        ctx.arc(s.pts[0] * W, s.pts[1] * H, lw / 2, 0, Math.PI * 2);
+        ctx.fill();
+        continue;
+      }
+      ctx.beginPath();
+      ctx.moveTo(s.pts[0] * W, s.pts[1] * H);
+      for (let i = 2; i < s.pts.length; i += 2) {
+        ctx.lineTo(s.pts[i] * W, s.pts[i + 1] * H);
+      }
+      ctx.stroke();
+    }
+    ctx.restore();
+  };
+
   const applyPixel = () => {
     if (!ed.pixelOn) return;
     const n = Math.max(8, Math.min(128, ed.pixelSize));
@@ -389,6 +419,7 @@ function drawScene(
   if (preset === "pfp") {
     drawCover(ctx, src, sw, sh, W, H);
     drawStickers();
+    drawStrokes();
     if (ed.ringOn) {
       ctx.beginPath();
       ctx.arc(W / 2, H / 2, W / 2 - 10 - ed.ringW / 2, 0, Math.PI * 2);
@@ -420,6 +451,7 @@ function drawScene(
   const y = (H - s) / 2;
   ctx.drawImage(src, x, y, s, s);
   drawStickers();
+  drawStrokes();
   if (ed.ringOn) {
     ctx.beginPath();
     ctx.arc(x + s / 2, y + s / 2, s / 2 - 6 - ed.ringW / 2, 0, Math.PI * 2);
@@ -472,9 +504,13 @@ export default function Studio() {
   const [selSticker, setSelSticker] = useState(-1);
   const [stickerSize, setStickerSize] = useState(14);
   const [stickerRot, setStickerRot] = useState(0);
+  const [drawOn, setDrawOn] = useState(false);
+  const [drawColor, setDrawColor] = useState("#131110");
+  const [drawSize, setDrawSize] = useState(6);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const loadToken = useRef(0);
   const dragRef = useRef<{ i: number; dx: number; dy: number } | null>(null);
+  const drawRef = useRef(false);
 
   const pick = (c: EnrichedChog) => {
     const token = ++loadToken.current;
@@ -689,6 +725,19 @@ export default function Studio() {
   const onCanvasDown = (e: ReactPointerEvent<HTMLCanvasElement>) => {
     if (!masked) return;
     const { px, py, W, H } = canvasPt(e);
+    if (drawOn) {
+      drawRef.current = true;
+      e.currentTarget.setPointerCapture(e.pointerId);
+      setSelSticker(-1);
+      setEd((s) => ({
+        ...s,
+        strokes: [
+          ...s.strokes,
+          { c: drawColor, w: drawSize / 1000, pts: [px / W, py / H] },
+        ],
+      }));
+      return;
+    }
     const i = hitSticker(px, py, W, H);
     setSelSticker(i);
     if (i >= 0) {
@@ -699,6 +748,24 @@ export default function Studio() {
   };
 
   const onCanvasMove = (e: ReactPointerEvent<HTMLCanvasElement>) => {
+    if (drawRef.current) {
+      const { px, py, W, H } = canvasPt(e);
+      const nx = px / W;
+      const ny = py / H;
+      setEd((s) => {
+        const strokes = s.strokes.slice();
+        const cur = strokes[strokes.length - 1];
+        if (!cur) return s;
+        const lx = cur.pts[cur.pts.length - 2];
+        const ly = cur.pts[cur.pts.length - 1];
+        const dx = nx - lx;
+        const dy = ny - ly;
+        if (dx * dx + dy * dy < 0.000009) return s;
+        strokes[strokes.length - 1] = { ...cur, pts: [...cur.pts, nx, ny] };
+        return { ...s, strokes };
+      });
+      return;
+    }
     const drag = dragRef.current;
     if (!drag) return;
     const { px, py, W, H } = canvasPt(e);
@@ -716,6 +783,10 @@ export default function Studio() {
   };
 
   const onCanvasUp = () => {
+    if (drawRef.current) {
+      drawRef.current = false;
+      return;
+    }
     if (dragRef.current) {
       dragRef.current = null;
       return;
@@ -763,6 +834,8 @@ export default function Studio() {
     }));
     setSelSticker(-1);
   };
+
+  const undoStroke = () => setEd((s) => ({ ...s, strokes: s.strokes.slice(0, -1) }));
 
   const tabBtn = (t: Tab, label: string) => (
     <button
@@ -1222,6 +1295,74 @@ export default function Studio() {
                 >
                   remove selected
                 </button>
+              )}
+            </div>
+
+            <div className="border-t border-line pt-4">
+              <div className="flex items-center justify-between">
+                <span className={label}>draw</span>
+                <button
+                  onClick={() => setDrawOn((v) => !v)}
+                  className={`rounded-full border px-3 py-1.5 font-mono text-[10px] uppercase tracking-widest ${
+                    drawOn
+                      ? "border-purple bg-purple text-white"
+                      : "border-line text-ash hover:border-ink hover:text-ink"
+                  }`}
+                >
+                  {drawOn ? "on" : "off"}
+                </button>
+              </div>
+              {drawOn && (
+                <>
+                  <div className="mt-3 flex items-center justify-between gap-3">
+                    <div className="flex gap-1.5">
+                      {DRAW_SWATCHES.map((c) => (
+                        <button
+                          key={c}
+                          onClick={() => setDrawColor(c)}
+                          aria-label={`draw color ${c}`}
+                          className={`h-6 w-6 rounded-full border-2 ${
+                            drawColor === c ? "border-purple" : "border-line"
+                          }`}
+                          style={{ background: c }}
+                        />
+                      ))}
+                    </div>
+                    <div className="flex gap-1.5">
+                      <button
+                        onClick={undoStroke}
+                        disabled={!ed.strokes.length}
+                        aria-label="undo stroke"
+                        className="rounded-full border border-line px-3 py-1.5 font-mono text-[10px] uppercase tracking-widest text-ash hover:border-ink hover:text-ink disabled:opacity-40"
+                      >
+                        undo
+                      </button>
+                      <button
+                        onClick={() => set("strokes", [])}
+                        disabled={!ed.strokes.length}
+                        aria-label="clear strokes"
+                        className="rounded-full border border-line px-3 py-1.5 font-mono text-[10px] uppercase tracking-widest text-ash hover:border-ink hover:text-ink disabled:opacity-40"
+                      >
+                        clear
+                      </button>
+                    </div>
+                  </div>
+                  <div className="mt-3 flex items-center gap-3">
+                    <span className={`${label} shrink-0`}>brush</span>
+                    <input
+                      type="range"
+                      min={1}
+                      max={40}
+                      value={drawSize}
+                      onChange={(e) => setDrawSize(Number(e.target.value))}
+                      className="w-full accent-purple"
+                      aria-label="draw size"
+                    />
+                    <span className="font-mono text-[10px] tabular-nums text-ash">
+                      {drawSize}
+                    </span>
+                  </div>
+                </>
               )}
             </div>
 

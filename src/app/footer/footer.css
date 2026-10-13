@@ -260,4 +260,11 @@ body:has(.footer-route) {
   .logo {
     display: none;
   }
+
+  /* the site-wide outro footer (StudioFooter) must hug its content on
+     small screens instead of forcing a full empty viewport */
+  .footer.studio-footer-page {
+    min-height: 0;
+    padding-bottom: 40px;
+  }
 }

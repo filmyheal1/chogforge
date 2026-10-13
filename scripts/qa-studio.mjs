@@ -69,7 +69,7 @@ const stats = (page) =>
   pageErrors(p);
   await p.goto(base + "/", { waitUntil: "domcontentloaded", timeout: 60000 });
   await p.waitForTimeout(3500);
-  out.navStudio = await p.locator('header a[href="/studio"]').isVisible().catch(() => false);
+  out.navStudio = await p.locator('header a[href="/studio"]:visible').isVisible().catch(() => false);
   out.footerStudio = await p.locator('footer a[href="/studio"]').count();
   await p.evaluate(() => {
     document.documentElement.style.scrollBehavior = "auto";
@@ -176,6 +176,56 @@ const stats = (page) =>
     .isVisible()
     .then((v) => !v)
     .catch(() => true);
+
+  // draw tool
+  const drawRow = p
+    .locator("div.flex.items-center.justify-between")
+    .filter({ hasText: "draw" });
+  const drawBtn = drawRow.locator("button");
+  out.drawLabelOff = (await drawBtn.textContent())?.trim() === "off";
+  const preToggle = await stats(p);
+  await drawBtn.click();
+  await p.waitForTimeout(300);
+  out.drawSwatches = await p.locator('button[aria-label^="draw color"]').count();
+  out.drawSlider = await p.locator('input[aria-label="draw size"]').isVisible().catch(() => false);
+  const preDraw = await stats(p);
+  out.drawToggleNoChange = preDraw.sum === preToggle.sum;
+  await p.locator("canvas").scrollIntoViewIfNeeded();
+  await p.waitForTimeout(300);
+  const cbox2 = await p.locator("canvas").boundingBox();
+  await p.mouse.move(cbox2.x + 60, cbox2.y + 60);
+  await p.mouse.down();
+  await p.mouse.move(cbox2.x + 120, cbox2.y + 90, { steps: 8 });
+  await p.mouse.move(cbox2.x + 190, cbox2.y + 55, { steps: 8 });
+  await p.mouse.up();
+  await p.waitForTimeout(600);
+  const drawn = await stats(p);
+  out.drawChanged = drawn.sum !== preDraw.sum;
+  out.drawClearEnabled = await p
+    .getByRole("button", { name: /clear strokes/i })
+    .isEnabled()
+    .catch(() => false);
+  if (out.drawClearEnabled) {
+    await p.getByRole("button", { name: /clear strokes/i }).click();
+    await p.waitForTimeout(600);
+    out.drawCleared = (await stats(p)).sum === preDraw.sum;
+    await p.mouse.move(cbox2.x + 90, cbox2.y + 220);
+    await p.mouse.down();
+    await p.mouse.move(cbox2.x + 230, cbox2.y + 260, { steps: 10 });
+    await p.mouse.up();
+    await p.waitForTimeout(500);
+    out.drawUndoEnabled = await p.getByRole("button", { name: /undo stroke/i }).isEnabled().catch(() => false);
+    await p.getByRole("button", { name: /undo stroke/i }).click();
+    await p.waitForTimeout(600);
+    out.drawUndoRestored = (await stats(p)).sum === preDraw.sum;
+  } else {
+    out.errors.push("draw: stroke was not registered by pointer gesture");
+  }
+  out.drawStillOn = (await drawBtn.textContent())?.trim() === "on";
+  await p.screenshot({ path: "refs/shots/st-draw.png" });
+  await drawBtn.click();
+  await p.waitForTimeout(200);
+  out.drawOffLabel = (await drawBtn.textContent())?.trim() === "off";
 
   // remove bg at default tolerance
   await p.getByRole("button", { name: /remove bg/i }).click();
@@ -290,7 +340,48 @@ const stats = (page) =>
   pageErrors(p);
   await p.goto(base + "/", { waitUntil: "domcontentloaded", timeout: 60000 });
   await p.waitForTimeout(3000);
-  out.phoneNavStudio = await p.locator('header a[href="/studio"]').isVisible().catch(() => false);
+  out.phoneNavStudio = await p.locator('header a[href="/studio"]:visible').isVisible().catch(() => false);
+  out.phoneNavOpenSea = await p
+    .locator('header a[href*="opensea"]:visible')
+    .first()
+    .isVisible()
+    .catch(() => false);
+  out.phoneNavFits = await p.evaluate(() => {
+    const h = document.querySelector("[data-nav]");
+    if (!h) return false;
+    const vis = [...h.querySelectorAll("a,button,nav")].filter((el) => {
+      const b = el.getBoundingClientRect();
+      return b.width > 0 && b.height > 0;
+    });
+    const allFit = vis.every((el) => {
+      const b = el.getBoundingClientRect();
+      return b.left >= -0.5 && b.right <= window.innerWidth + 0.5;
+    });
+    let ordered = true;
+    for (let i = 1; i < vis.length; i++) {
+      const prev = vis[i - 1].getBoundingClientRect();
+      const cur = vis[i].getBoundingClientRect();
+      if (prev.right > cur.left + 0.5) ordered = false;
+    }
+    return allFit && ordered && document.documentElement.scrollWidth <= window.innerWidth;
+  });
+  await p.getByRole("button", { name: "Open menu" }).click();
+  out.phoneMenuOpen = await p.locator("[data-nav-menu]").isVisible().catch(() => false);
+  out.phoneMenuLinks = await p.locator("[data-nav-menu] a").count();
+  await p.screenshot({ path: "refs/shots/m-nav.png" });
+  await p.getByRole("button", { name: "Close menu" }).click();
+  out.phoneMenuClosed = (await p.locator("[data-nav-menu]").count()) === 0;
+  out.phoneFooterHug = await p.evaluate(() => {
+    const f = document.querySelector("footer.studio-footer-page");
+    if (!f) return null;
+    return Math.round(f.getBoundingClientRect().height) < window.innerHeight * 0.75;
+  });
+  await p.evaluate(() => {
+    document.documentElement.style.scrollBehavior = "auto";
+    window.scrollTo(0, document.body.scrollHeight);
+  });
+  await p.waitForTimeout(1500);
+  await p.screenshot({ path: "refs/shots/m-bottom.png" });
   await p.goto(base + "/studio", { waitUntil: "domcontentloaded", timeout: 60000 });
   await p.waitForTimeout(2500);
   await p.screenshot({ path: "refs/shots/st-phone.png" });

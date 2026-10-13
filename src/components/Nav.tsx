@@ -29,6 +29,7 @@ const NUMERALS = [
 
 export default function Nav({ ready }: { ready: boolean }) {
   const [active, setActive] = useState("wall");
+  const [menu, setMenu] = useState(false);
   const dark = useSyncExternalStore(subscribeDark, getDark, () => false);
 
   useEffect(() => {
@@ -78,7 +79,7 @@ export default function Nav({ ready }: { ready: boolean }) {
       >
         <a
           href="#top"
-          className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.2em] hover:text-purple"
+          className="flex shrink-0 items-center gap-2 font-mono text-[11px] uppercase tracking-[0.2em] hover:text-purple"
         >
           <img
             src="/chog-face.svg"
@@ -89,12 +90,12 @@ export default function Nav({ ready }: { ready: boolean }) {
           Chog<span className="text-purple">forge</span>
         </a>
 
-        <nav className="flex items-center gap-1 rounded-full border border-line bg-bone px-2 py-1.5">
+        <nav className="hidden items-center gap-1 rounded-full border border-line bg-bone px-2 py-1.5 md:flex">
           {LINKS.map((l) => (
             <a
               key={l.id}
               href={`#${l.id}`}
-              className={`rounded-full px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.15em] transition-colors md:text-[11px] ${
+              className={`rounded-full px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.15em] transition-colors ${
                 active === l.id
                   ? "bg-ink text-bone"
                   : "text-ash hover:text-ink"
@@ -105,7 +106,7 @@ export default function Nav({ ready }: { ready: boolean }) {
           ))}
           <a
             href="/studio"
-            className="hidden rounded-full px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.15em] text-purple transition-colors hover:bg-purple/10 md:block md:text-[11px]"
+            className="rounded-full px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.15em] text-purple transition-colors hover:bg-purple/10"
           >
             Your chog
           </a>
@@ -113,13 +114,27 @@ export default function Nav({ ready }: { ready: boolean }) {
             href="https://opensea.io/collection/chog-genesis"
             target="_blank"
             rel="noreferrer"
-            className="hidden rounded-full bg-purple px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.15em] text-white transition-opacity hover:opacity-85 md:block"
+            className="rounded-full bg-purple px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.15em] text-white transition-opacity hover:opacity-85"
           >
             OpenSea ↗
           </a>
         </nav>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-1.5 md:gap-3">
+          <a
+            href="/studio"
+            className="shrink-0 whitespace-nowrap rounded-full border border-purple/40 px-2 py-1.5 font-mono text-[9px] uppercase tracking-[0.06em] text-purple transition-colors hover:bg-purple/10 md:hidden"
+          >
+            Your chog
+          </a>
+          <a
+            href="https://opensea.io/collection/chog-genesis"
+            target="_blank"
+            rel="noreferrer"
+            className="shrink-0 whitespace-nowrap rounded-full bg-purple px-2 py-1.5 font-mono text-[9px] uppercase tracking-[0.06em] text-white transition-opacity hover:opacity-85 md:hidden"
+          >
+            OpenSea ↗
+          </a>
           <button
             onClick={toggleTheme}
             aria-label="Toggle dark mode"
@@ -136,11 +151,49 @@ export default function Nav({ ready }: { ready: boolean }) {
               </svg>
             )}
           </button>
+          <button
+            onClick={() => setMenu((v) => !v)}
+            aria-label={menu ? "Close menu" : "Open menu"}
+            aria-expanded={menu}
+            className="flex h-8 w-8 items-center justify-center rounded-full border border-line text-ash transition-colors hover:border-ink hover:text-ink md:hidden"
+          >
+            {menu ? (
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                <path d="M18 6 6 18M6 6l12 12" />
+              </svg>
+            ) : (
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                <path d="M3 6h18M3 12h18M3 18h18" />
+              </svg>
+            )}
+          </button>
           <span className="hidden font-mono text-[11px] uppercase tracking-[0.2em] text-ash md:block">
             Monad · 1969
           </span>
         </div>
       </motion.header>
+
+      {menu && (
+        <div
+          data-nav-menu
+          className="fixed inset-x-0 top-[74px] z-40 border-b border-line bg-bone px-4 py-3 md:hidden"
+        >
+          <nav className="flex flex-col gap-1">
+            {LINKS.map((l) => (
+              <a
+                key={l.id}
+                href={`#${l.id}`}
+                onClick={() => setMenu(false)}
+                className={`rounded-lg px-3 py-2.5 font-mono text-[11px] uppercase tracking-[0.15em] transition-colors ${
+                  active === l.id ? "bg-ink text-bone" : "text-ash hover:text-ink"
+                }`}
+              >
+                {l.label}
+              </a>
+            ))}
+          </nav>
+        </div>
+      )}
 
       <div className="fixed right-4 top-1/2 z-40 hidden -translate-y-1/2 flex-col items-center gap-6 md:flex">
         {NUMERALS.map(({ id, n }) => (
